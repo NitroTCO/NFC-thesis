@@ -117,63 +117,41 @@ def decode_is_one(b_max, b_min, a_max, a_min):
 ###                          ###
 
 def miller_decode(sig):
-    T = np.arange(len(sig)) / FS # µs
+    # T = np.arange(len(sig)) / FS # µs
     decoded = []
 
     background_level = sig[0]
 
-    # plt.plot(T, sig)
-    # plt.ylim(50, 90)
-    # plt.axhline(background_level, color="black")
-
-    # Set set lines
-    bit_lines = []
-    bit_lines.append(T[0])
-
+    before = background_level
+    after = background_level
     acc = 0
-    for i in range(len(sig)):
-        acc += (1/FS)
+    for x in sig:
+        acc += 1/FS
 
-        if(acc > BIT_PERIOD):
-            bit_lines.append(T[i])
-            acc = 0
-
-    half_lines = [x + BIT_PERIOD/2 for x in bit_lines]
-
-    # for line in bit_lines:
-    #     plt.axvline(line, color="orange")
-    # for line in half_lines:
-    #     plt.axvline(line, linestyle="--", color="orange")
-
-    # Decode signal
-    before_mid_min = background_level
-    after_mid_min = background_level
-    after = False
-
-    for i, x in enumerate(sig):
-        if i/FS in bit_lines:
-            if abs(before_mid_min - background_level) >= BG_ERROR_MARGIN or \
-               abs(after_mid_min - background_level) >= BG_ERROR_MARGIN:
-                if before_mid_min < after_mid_min and \
-                   before_mid_min < background_level - BG_ERROR_MARGIN:
+        # bit period expired, decode
+        if acc > BIT_PERIOD:
+            if abs(before - background_level) >= BG_ERROR_MARGIN or \
+               abs(after - background_level) >= BG_ERROR_MARGIN:
+                if abs(before - after) > 0.1:
+                    if before > after:
+                        decoded.append(1)
+                    else:
+                        decoded.append(0)
+                elif decoded[-1] == 1:
                     decoded.append(0)
-                else:
-                    decoded.append(1)
-            before_mid_min = background_level
-            after_mid_min = background_level
-            after = False
 
-        if i/FS in half_lines:
-            after = True
+                before = background_level
+                after = background_level
+                acc = 0
+                continue
 
-        if after:
-            if x < after_mid_min:
-                after_mid_min = x
+        if acc > BIT_PERIOD/2:
+            if x < after:
+                after = x
         else:
-            if x < before_mid_min:
-                before_mid_min = x
+            if x < before:
+                before = x
 
-    # plt.show()
     return decoded
 
 
