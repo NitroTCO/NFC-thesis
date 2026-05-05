@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 FS = 62.5e6 # Hz
 BIT_PERIOD = 9.44e-6
-BG_ERROR_MARGIN = 2
+BG_ERROR_MARGIN = 1
 
 ###                          ###
 #------ HELPER FUNCTIONS ------#
@@ -108,14 +108,14 @@ def bits_to_hex(bit_list):
 ###                          ###
 
 def miller_decode(sig):
-    decoded = []
     background_level = sig[0]
+    decoded = []
 
     before = background_level
     after = background_level
     acc = 0
     start = True
-    for i, x in enumerate(sig):
+    for x in sig:
         # looking for start of message
         if abs(x - background_level) < BG_ERROR_MARGIN and start:
             continue
@@ -203,7 +203,7 @@ def manchester_decode(sig):
 
 sig = np.loadtxt("../waveform-traces/trace-2026-03-30 16:20:55.750289-62.5Mss-12.5Mpts.txt")
 sig = sig[int(4e6):int(1.1e7)]  # cut region of interest
-plot_signal(sig, FS, "raw signal")
+# plot_signal(sig, FS, "raw signal")
 
 
 analytic_signal = hilbert(sig)
@@ -215,7 +215,7 @@ smoothed_signal = lfilter(b, a, amplitude_envelope)
 # remove start and end of envelope
 smoothed_signal = smoothed_signal[1000:-1000000]
 
-plot_signal(smoothed_signal, FS, "smoothed signal")
+# plot_signal(smoothed_signal, FS, "smoothed signal")
 
 # Extract blocks of signal by amplitude
 reader_blocks = extract_signal_by_amplitude(smoothed_signal, 1000, (0, 82), 5)
@@ -227,7 +227,7 @@ for i, rc in enumerate(zip(reader_blocks, card_blocks)):
     start_r, stop_r = reader
     start_c, stop_c = card
 
-    plot_signal(smoothed_signal[start_r: stop_c], FS, f"reader card {i}")
+    # plot_signal(smoothed_signal[start_r: stop_c], FS, f"reader card {i}")
 
     # reader message block
     sig_r = smoothed_signal[start_r - 2000 : stop_r + 2000]
