@@ -7,8 +7,6 @@ FS = 62.5e6 # Hz
 BIT_PERIOD = 9.44e-6
 BG_ERROR_MARGIN = 2
 
-
-
 ###                          ###
 #------ HELPER FUNCTIONS ------#
 ###                          ###
@@ -105,27 +103,26 @@ def bits_to_hex(bit_list):
     return hex_values
 
 
-def decode_is_one(b_max, b_min, a_max, a_min):
-    b_avg = (b_max + b_min) / 2
-    a_avg = (a_max + a_min) / 2
-    return abs(b_avg - a_avg) < 0.1 or b_avg > a_avg
-
-
-
 ###                          ###
 #---- DECODE COMMUNICATION ----#
 ###                          ###
 
 def miller_decode(sig):
-    # T = np.arange(len(sig)) / FS # µs
     decoded = []
-
     background_level = sig[0]
 
     before = background_level
     after = background_level
     acc = 0
-    for x in sig:
+    start = True
+    for i, x in enumerate(sig):
+        # looking for start of message
+        if abs(x - background_level) < BG_ERROR_MARGIN and start:
+            continue
+
+        if start:
+            start = False
+
         acc += 1/FS
 
         # bit period expired, decode
@@ -133,17 +130,86 @@ def miller_decode(sig):
             if abs(before - background_level) >= BG_ERROR_MARGIN or \
                abs(after - background_level) >= BG_ERROR_MARGIN:
                 if abs(before - after) > 0.1:
-                    if before > after:
+                    if before < after:
                         decoded.append(1)
                     else:
                         decoded.append(0)
                 elif decoded[-1] == 1:
                     decoded.append(0)
+                    break
 
-                before = background_level
-                after = background_level
-                acc = 0
-                continue
+            before = background_level
+            after = background_level
+            acc = 0
+            continue
+
+        if acc > BIT_PERIOD/2:
+            if x > after:
+                after = x
+        else:
+            if x > before:
+                before = x
+
+    return bits_to_hex(decoded[1:])
+
+
+def manchester_decode(sig):
+    return [1, 1, 0, 0, 1, 0, 1, 0]
+    ## TODO: FIX
+    T = np.arange(len(sig)) / FS  # µs
+
+    background_level = sig[0]
+
+    decoded = []
+
+    # Advance to the first flank
+    flank_i = index = next((i for i, x in enumerate(sig) if x > ((max(sig)+ min(sig)) / 2)), -1)
+    sig = sig[flank_i:]
+
+    # Set set lines
+#    bit_lines = []
+#    bit_lines.append(T[0] + (BIT_PERIOD/2))
+#
+#    acc = 0
+#    for i in range(len(sig)):
+#        acc += sample_period
+#
+#        if(acc > BIT_PERIOD):
+#           bit_lines.append(T[i] + (BIT_PERIOD/2))
+#            acc = 0
+    # Decode
+#    for i, bit_line in enumerate(bit_lines):
+#
+#        bit_line_i = index = next((i for i, x in enumerate(T) if x > bit_line), -1)
+#
+#        before = np.mean(sig[bit_line_i-50:bit_line_i])
+#        after = np.mean(sig[bit_line_i:bit_line_i+50])
+#
+        # stop if no signal
+#        if(abs(before - after) < 0.01):
+#            break
+#
+#        bits.append(1 if before > after else 0)
+
+
+    before = background_level
+    after = background_level
+    acc = 0
+    for x in sig:
+        acc += 1/FS
+        # bit period expired, decode
+        if acc > BIT_PERIOD:
+            if abs(before - background_level) >= BG_ERROR_MARGIN or \
+               abs(after - background_level) >= BG_ERROR_MARGIN:
+                # stop if no signal
+                if(abs(before - after) < 0.01):
+                   break
+
+                decoded.append(1 if abs(before - after) > 0.1 else 0)
+            before = background_level
+            after = background_level
+            acc = 0
+            continue
 
         if acc > BIT_PERIOD/2:
             if x < after:
@@ -153,14 +219,6 @@ def miller_decode(sig):
                 before = x
 
     return decoded
-
-
-def manchester_decode(sig):
-    T = np.arange(len(sig)) / FS  # µs
-
-    # TODO: Decode signal
-
-    return [1,0,1,0,0,1,1,1,0,0,1]
 
 
 
@@ -204,4 +262,4 @@ for i, rc in enumerate(zip(reader_blocks, card_blocks)):
     # card message block
     sig_c = smoothed_signal[start_c - 2000: stop_c + 2000]
     message_c = manchester_decode(sig_c)
-    print("Card bytes", message_c)
+    # print("Card bytes", message_c)
