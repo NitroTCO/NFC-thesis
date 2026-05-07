@@ -1,11 +1,14 @@
 import numpy as np
 from scipy.signal import hilbert, butter, filtfilt, lfilter
+import getopt
+from sys import argv
 
 import matplotlib.pyplot as plt
 
 FS = 62.5e6 # Hz
 BIT_PERIOD = 9.44e-6
 BG_ERROR_MARGIN = 1
+PLOTTING = False
 
 ###                          ###
 #------ HELPER FUNCTIONS ------#
@@ -110,32 +113,50 @@ def bits_to_hex(bit_list):
 def miller_decode(sig):
     background_level = sig[0]
     decoded = []
+    if PLOTTING:
+        T = np.arange(len(sig)) / FS  # µs
+        plt.plot(T, sig)
 
     before = background_level
     after = background_level
     acc = 0
     start = True
-    for x in sig:
+    for i, x in enumerate(sig):
         # looking for start of message
         if abs(x - background_level) < BG_ERROR_MARGIN and start:
             continue
 
         if start:
             start = False
+            if PLOTTING:
+                plt.axvline(i/FS, linewidth=.5, color="red")
+                plt.xlim(left=(i/FS)-BIT_PERIOD)
 
         acc += 1/FS
 
         # bit period expired, decode
         if acc > BIT_PERIOD:
+            if PLOTTING:
+                plt.axvline(i/FS, linewidth=.5, color="black")
             if abs(before - background_level) >= BG_ERROR_MARGIN or \
                abs(after - background_level) >= BG_ERROR_MARGIN:
+                if PLOTTING:
+                    plt.axvline(i/FS - BIT_PERIOD/2, linewidth=.5, color="black", linestyle="--")
                 if abs(before - after) > 0.1:
                     if before < after:
                         decoded.append(1)
+                        if PLOTTING:
+                            plt.plot(i/FS - BIT_PERIOD/2, 20, "go")
                     else:
                         decoded.append(0)
+                        if PLOTTING:
+                            plt.plot(i/FS - BIT_PERIOD/2, 10, "go")
                 elif decoded[-1] == 1:
                     decoded.append(0)
+                    if PLOTTING:
+                        plt.plot(i/FS - BIT_PERIOD/2, 10, "go")
+                        plt.axvline(1/FS, linewidth=.5, color="red")
+                        plt.xlim(right=1/FS+BIT_PERIOD)
                     break
 
             before = background_level
@@ -149,37 +170,54 @@ def miller_decode(sig):
         else:
             if x > before:
                 before = x
-
+    if PLOTTING:
+        plt.show()
     return bits_to_hex(decoded[1:])
 
 
 def manchester_decode(sig):
     background_level = sig[0]
     decoded = []
+    if PLOTTING:
+        T = np.arange(len(sig)) / FS  # µs
+        plt.plot(T, sig)
 
     before = background_level
     after = background_level
     acc = 0
     start = True
-    for x in sig:
+    for i, x in enumerate(sig):
         # looking for start of message
         if abs(x - background_level) < BG_ERROR_MARGIN and start:
             continue
 
         if start:
             start = False
+            if PLOTTING:
+                plt.axvline(i/FS, linewidth=.5, color="red")
+                plt.xlim(left=(i/FS)-BIT_PERIOD)
 
         acc += 1/FS
 
         # bit period expired, decode
         if acc > BIT_PERIOD:
+            if PLOTTING:
+                plt.axvline(i/FS, linewidth=.5, color="black")
             if abs(before - background_level) >= BG_ERROR_MARGIN or \
                abs(after - background_level) >= BG_ERROR_MARGIN:
                 # stop if no signal
                 if(abs(before - after) < 0.01):
-                   break
+                    if PLOTTING:
+                        plt.axvline(i/FS, linewidth=.5, color="red")
+                        plt.xlim(right=i/FS+BIT_PERIOD)
+                    break
+
+                if PLOTTING:
+                    plt.axvline(i/FS - BIT_PERIOD/2, linewidth=.5, color="black", linestyle="--")
 
                 decoded.append(1 if before > after else 0)
+                if PLOTTING:
+                    plt.plot(i/FS - BIT_PERIOD/2, 76 if before > after else 74, "go")
 
             before = background_level
             after = background_level
@@ -193,15 +231,49 @@ def manchester_decode(sig):
             if x > before:
                 before = x
 
+    if PLOTTING:
+        plt.show()
     return bits_to_hex(decoded[1:])
 
 
 
 ###                               ###
+#-------- PROGRAM AGRUMENTS --------#
+###                               ###
+trace = "../waveform-traces/trace-2026-03-30 16:20:55.750289-62.5Mss-12.5Mpts.txt"
+args = argv[1:]
+options = "hpt:"
+long_options = ["Help", "Plot", "Trace="]
+
+try:
+    arguments, values = getopt.getopt(args, options, long_options)
+    for currentArg, currentVal in arguments:
+        if currentArg in ("-h", "--Help"):
+            print("""Usage:
+    python mfdes_demodulate.py [options]
+
+Options:
+    -h --Help               :  Show this message
+    -p --Plot               :  Show plots while running
+    -t --Trace <trace file> :  Set to decode given file""")
+            exit(0)
+        elif currentArg in ("-p", "--Plot"):
+            PLOTTING = True
+        elif currentArg in ("-t", "--Trace"):
+            trace = currentVal
+except getopt.error as err:
+    print(str(err))
+    exit(1)
+
+###                               ###
 #---------- MAIN ANALYSIS ----------#
 ###                               ###
 
-sig = np.loadtxt("../waveform-traces/trace-2026-03-30 16:20:55.750289-62.5Mss-12.5Mpts.txt")
+try:
+    sig = np.loadtxt(trace)
+except FileNotFoundError:
+    print(f"No such file or directory: {trace}")
+    exit(1)
 sig = sig[int(4e6):int(1.1e7)]  # cut region of interest
 # plot_signal(sig, FS, "raw signal")
 
