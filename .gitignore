@@ -1,3 +1,4 @@
 protocol-traces/*
 waveform-traces/*
 progs/*.png
+main
