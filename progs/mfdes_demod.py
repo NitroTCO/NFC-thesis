@@ -5,6 +5,8 @@ from scipy.signal import hilbert, butter, filtfilt, lfilter
 
 from sklearn.cluster import KMeans
 
+import time
+
 FS = 62.5e6 # Hz 
 BIT_PERIOD = 9.44e-6
 
@@ -159,6 +161,8 @@ def extract_signal_clusters(signal, step = 6000):
 def miller_decode(sig):
     T = np.arange(len(sig)) / FS
 
+    start_time = time.time()
+
     flank_i = index = next((i for i, x in enumerate(sig) if x < 0.5), -1)
     sig = sig[flank_i:]
     T = T[flank_i:]
@@ -204,7 +208,9 @@ def miller_decode(sig):
             break
 
     byte = bits_to_hex(bits[1:])
-    
+
+    end_time = time.time()
+    print(f"Miller decode: {end_time-start_time} s elapsed.")
     if byte:
         return byte
     else:
@@ -214,6 +220,8 @@ def miller_decode(sig):
 def manchester_decode(sig):
     sample_period = 1.0 / FS
     T = np.arange(len(sig)) / FS  # µs
+
+    start_time = time.time()
 
     bits = []
 
@@ -249,6 +257,8 @@ def manchester_decode(sig):
 
         bits.append(1 if before > after else 0)
 
+    end_time = time.time()
+    print(f"Manchester decode: {end_time-start_time} s elapsed.")
     # print(bits)
     return bits_to_hex(bits[1:])
 
@@ -299,7 +309,7 @@ def print_communication(signal, title):
     # For each call response, decode the card and reader messages
     T = np.arange(len(signal_n)) / FS  # µs
     for i, rc in enumerate(zip(reader_blocks, card_blocks)):
-        f= open(f"data/{title}.txt", 'a')
+        # f = open(f"data/{title}.txt", 'a')
         reader, card = rc
         start_r, stop_r = reader
         start_c, stop_c = card
@@ -328,7 +338,7 @@ def print_communication(signal, title):
 ###                               ###
 import glob, re
 
-traces = glob.glob("./waveform-traces/*") 
+traces = glob.glob("../waveform-traces/*")
 print(traces)
 
 for trace in traces:

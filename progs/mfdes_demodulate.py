@@ -2,6 +2,7 @@ import numpy as np
 from scipy.signal import hilbert, butter, filtfilt, lfilter
 import getopt
 from sys import argv
+import time
 
 import matplotlib.pyplot as plt
 
@@ -132,6 +133,7 @@ def miller_decode(sig):
                 plt.axvline(i/FS, linewidth=.5, color="red")
                 plt.xlim(left=(i/FS)-BIT_PERIOD)
 
+        start_time = time.time()
         acc += 1/FS
 
         # bit period expired, decode
@@ -170,6 +172,9 @@ def miller_decode(sig):
         else:
             if x > before:
                 before = x
+
+    end_time = time.time()
+    print(f"Miller decode: {end_time-start_time} s elapsed.")
     if PLOTTING:
         plt.show()
     return bits_to_hex(decoded[1:])
@@ -197,6 +202,7 @@ def manchester_decode(sig):
                 plt.axvline(i/FS, linewidth=.5, color="red")
                 plt.xlim(left=(i/FS)-BIT_PERIOD)
 
+        start_time = time.time()
         acc += 1/FS
 
         # bit period expired, decode
@@ -231,6 +237,8 @@ def manchester_decode(sig):
             if x > before:
                 before = x
 
+    end_time = time.time()
+    print(f"Manchester decode: {end_time-start_time} s elapsed.")
     if PLOTTING:
         plt.show()
     return bits_to_hex(decoded[1:])

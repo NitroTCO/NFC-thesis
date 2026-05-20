@@ -17,8 +17,10 @@ char *file_to_open = NULL;
 int main(int argc, char *argv[]) {
     // paring arguments.
     char *default_file = "waveform-traces/trace-2026-03-30 16:20:55.750289-62.5Mss-12.5Mpts.txt";
+    int help = 0;
     for (int i = 1; i < argc; i++) {
-        if (!strncmp(argv[i], "-h", 2) or !strncmp(argv[i], "--Help", 6)) {
+        if ((!strncmp(argv[i], "-h", 2) or !strncmp(argv[i], "--Help", 6)) and !help) {
+            help = 1;
             printf("Usage:\n"
                    "    ./main [options]\n"
                    "Options:\n"
