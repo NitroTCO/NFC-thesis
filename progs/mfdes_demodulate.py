@@ -107,6 +107,12 @@ def bits_to_hex(bit_list):
     return hex_values
 
 
+def save_signal_to_file(sig, file_path):
+    with open(file_path, "w") as f:
+        for x in sig:
+            f.write(f"{x}\n")
+
+
 ###                          ###
 #---- DECODE COMMUNICATION ----#
 ###                          ###
@@ -288,12 +294,19 @@ sig = sig[int(4e6):int(1.1e7)]  # cut region of interest
 
 analytic_signal = hilbert(sig)
 amplitude_envelope = np.abs(analytic_signal)
+# plot_signal(amplitude_envelope, FS, "absoluted hilbert")
 
 b, a = butter(4, 2e6 / (FS / 2), btype='low')
 smoothed_signal = lfilter(b, a, amplitude_envelope)
 
 # remove start and end of envelope
 smoothed_signal = smoothed_signal[1000:-1000000]
+
+# plt.plot(np.arange(0, 590, 1), smoothed_signal[0:590])
+# plt.show()
+# exit(0)
+
+save_signal_to_file(smoothed_signal, "../smoothed_signal.txt")
 
 # plot_signal(smoothed_signal, FS, "smoothed signal")
 
