@@ -8,11 +8,22 @@
 
 // Constants
 #define BIT_PERIOD      9.44e-6 // seconds
-#define _BUF_SIZE        BIT_PERIOD * _FS
 #define MAX_LINE_READ   255 // Max characters to read from a single line in trace file.
 
-void set_fs(double fs);
+typedef struct buffer {
+    double *values;
+    double fs;
+    size_t size;
+    int start;
+    FILE *trace;
+    int next_index;
+    int iter_finished;
+    int (*fill)(struct buffer*);
+    int (*partial_fill)(struct buffer*, size_t);
+    double (*next)(struct buffer*);
+    void (*save)(struct buffer*, char*);
+} buffer;
 
-double *make_buffer(void);
+buffer *init_buffer(FILE *trace, double fs);
 
-int fill_buffer(FILE *fh, double *buffer);
+void free_buffer(buffer *buf);

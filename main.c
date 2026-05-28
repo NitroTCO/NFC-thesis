@@ -18,19 +18,20 @@
 double FS = 0;
 char *file_to_open = NULL;
 
-void find_communication(FILE *fh, double *buffer, decode_t starting_mode) {
-    if (!fh or !buffer) {
-        fprintf(stderr, "find_communication: file or buffer NULL");
+void find_communication(buffer *buf, decode_t starting_mode) {
+    if (!buf) {
+        fprintf(stderr, "find_communication: buffer NULL");
         exit(1);
     }
     fprintf(stderr, "find_communication\n");
 
-    fill_buffer(fh, buffer);
-    double background_level = buffer[0];
+    int success = buf->fill(buf);
+    if (success != 0) {
+        return;
+    }
+    double background_level = buf->values[buf->start];
 
-    find_start(fh, buffer, background_level, (size_t)BUF_SIZE);
-
-    decode(fh, buffer, background_level, (size_t)BUF_SIZE, starting_mode);
+    decode(buf, background_level, starting_mode);
 }
 
 int main(int argc, char *argv[]) {
@@ -64,7 +65,6 @@ int main(int argc, char *argv[]) {
         printf("Defaulting to a sample frequency of 62.5e6 Hz\n");
         FS = 62.5e6;
     }
-    set_fs(FS);
 
     // 2. Open trace file.
     FILE *fh = fopen(file_to_open, "r");
@@ -74,15 +74,13 @@ int main(int argc, char *argv[]) {
     }
 
     // 3. Make buffer and read file.
-    double *buffer = make_buffer();
-    if (!buffer) {
+    buffer *buf = init_buffer(fh, FS);
+    if (!buf) {
         fprintf(stderr, "Failed initializing buffer!\n");
         exit(1);
     }
-    find_communication(fh, buffer, Miller);
-    free(buffer);
-
-    fclose(fh);
+    find_communication(buf, Miller);
+    free_buffer(buf);
 
     return 0;
 }
