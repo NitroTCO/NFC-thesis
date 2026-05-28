@@ -282,7 +282,8 @@ except getopt.error as err:
 ###                               ###
 #---------- MAIN ANALYSIS ----------#
 ###                               ###
-
+print("program start")
+time0 = time.time()
 try:
     sig = np.loadtxt(trace)
 except FileNotFoundError:
@@ -291,13 +292,21 @@ except FileNotFoundError:
 sig = sig[int(4e6):int(1.1e7)]  # cut region of interest
 # plot_signal(sig, FS, "raw signal")
 
+time1 = time.time()
+print(f"reading: {time1-time0} s");
 
 analytic_signal = hilbert(sig)
 amplitude_envelope = np.abs(analytic_signal)
 # plot_signal(amplitude_envelope, FS, "absoluted hilbert")
 
+time2 = time.time()
+print(f"hilbert filter: {time2-time1} s")
+
 b, a = butter(4, 2e6 / (FS / 2), btype='low')
 smoothed_signal = lfilter(b, a, amplitude_envelope)
+
+time3 = time.time()
+print(f"butter filter: {time3-time2} s")
 
 # remove start and end of envelope
 smoothed_signal = smoothed_signal[1000:-1000000]
@@ -306,13 +315,16 @@ smoothed_signal = smoothed_signal[1000:-1000000]
 # plt.show()
 # exit(0)
 
-save_signal_to_file(smoothed_signal, "../smoothed_signal.txt")
+# save_signal_to_file(smoothed_signal, "../smoothed_signal.txt")
 
 # plot_signal(smoothed_signal, FS, "smoothed signal")
 
 # Extract blocks of signal by amplitude
 reader_blocks = extract_signal_by_amplitude(smoothed_signal, 1000, (0, 82), 5)
 card_blocks = extract_signal_by_amplitude(smoothed_signal, 1000, (70, 78), 2)
+
+time4 = time.time()
+print(f"blocks dividing: {time4-time3} s")
 
 # For each call response, decode the card and reader messages
 for i, rc in enumerate(zip(reader_blocks, card_blocks)):
