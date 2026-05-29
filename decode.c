@@ -1,156 +1,176 @@
 #include "decode.h"
 
-void decode(buffer *buf, double background_level, decode_t starting_mode) {
-    if (!buf) {
-        fprintf(stderr, "decode: buffer NULL");
-        exit(1);
-    }
-    fprintf(stderr, "decode\n");
-
+void decode(FILE *trace, double background_level, decode_t starting_mode, double fs) {
+    find_start(trace, background_level);
     decode_t mode = starting_mode;
-    bit last_bit = -1;
-    bit decoded_bit;
-    char read = find_start(buf, background_level);
-    int ith_bit = 1;
-
-    if (read == -1) { return; }
-    while (!read) {
+    double read;
+    decoded_bits *decoded;
+    do {
+        read = next(trace);
+        bit last_bit = 2;
         switch (mode) {
-        case Manchester:
-            decoded_bit = manchester_decode(buf, ith_bit);
-            buf->save(buf, "a");
-            switch (decoded_bit) {
-            case -1:
-                fprintf(stderr, " An error occurred during Manchester decoding\n");
-                exit(2);
-                break;
-            case 2: // end of message
-                mode = Miller;
-                printf("\n");
-                printf("Manchester decoding concluded. Switching...\n");
-                exit(42);
-                ith_bit = 1;
-                if (find_start(buf, background_level)  == -1) {
-                    return;
-                };
-                continue;
-            default:
-                fprintf(stderr, "%d", decoded_bit);
-                break;
-            };
-            break;
         case Miller:
-            decoded_bit = miller_decode(buf, last_bit, ith_bit);
-            switch (decoded_bit) {
-            case -1:
-                fprintf(stderr, " An error occured during Miller decoding\n");
-                exit(2);
-                break;
-            case 2: // End of message
-                //TODO: !!! APPEND 0 !!!
-                printf("0\n");
-                printf("Miller decoding concluded. Switching...\n");
-                ith_bit = 1;
-                mode = Manchester;
-                last_bit = -1;
-                if (find_start(buf, background_level)) {
-                    return;
-                }
-                continue;
-            default:
-                last_bit = decoded_bit;
-                fprintf(stderr, "%d", (int)decoded_bit);
+            decoded = miller_decode(trace, fs, background_level);
+            decoded->print(decoded);
+            if (!check_parity(decoded)) {
+                dynarr_free(decoded);
+                fclose(trace);
+                exit(1);
             }
+            find_start(trace, background_level);
+            mode = Manchester;
+            dynarr_free(decoded);
             break;
+
+        case Manchester:
+            decoded = manchester_decode(trace, fs, background_level);
+            decoded->print(decoded);
+            if (!check_parity(decoded)) {
+                dynarr_free(decoded);
+                fclose(trace);
+                exit(1);
+            }
+            find_start(trace, background_level);
+            mode = Miller;
+            dynarr_free(decoded);
+            break;
+
         default:
             fprintf(stderr, "unknown decode method\n");
             exit(1);
-        };
-        read = buf->fill(buf);
-        ith_bit++;
+        }
+    } while (read);
+}
+
+void find_start(FILE *trace, double background_level) {
+    int acc = 0;
+    double x = next(trace);
+    while (x) {
+        acc++;
+        if (fabs(x - background_level) > BG_THRESHOLD) {
+            return;
+        }
+        x = next(trace);
     }
 }
 
-bit manchester_decode(buffer *buf, int ith_bit) {
-    if (!buf) { return -1; }
+decoded_bits *miller_decode(FILE *trace, double fs, double background_level) {
+    fprintf(stderr, "miller_decode: ");
+    decoded_bits *decoded = dynarr_init();
 
-    double before = 0;
-    double after = 0;
-    size_t i = 0;
-    while (!buf->iter_finished) {
-        double x = buf->next(buf);
-        if (i < buf->size/2) {
-            if (x > before) {
-                before = x;
+    double before = background_level;
+    double after = background_level;
+    int acc = 0;
+    int i = 0;
+    double x = next(trace);
+    bit last_bit = -1;
+    FILE *save = fopen("test.txt", "a");
+    fprintf(save, "%lf\n", x);
+    do {
+        acc += 1;
+
+        // bit period expired, decode
+        if (acc/fs > BIT_PERIOD) {
+            if (fabs(before - after) > BG_THRESHOLD) {
+                if (before < after) {
+                    decoded->append(decoded, 1);
+                } else {
+                    decoded->append(decoded, 0);
+                }
+            } else if (last_bit == 0) {
+                // no more change detected, check if last was 0
+                //   (where the end should have been detected) to make sure it
+                //   is actually the end of message
+                break;
             }
-        } else {
+            before = background_level;
+            after = background_level;
+            acc = 0;
+            if (decoded->size > 0) {
+                last_bit = decoded->values[decoded->size - 1];
+            }
+            continue;
+        }
+
+        if (acc/fs > BIT_PERIOD/2) {
             if (x > after) {
                 after = x;
             }
-        }
-        i++;
-    }
-    buf->iter_finished = 0;
-    if (fabs(before - after) < 0.1) {
-        return 2; // end of message
-    }
-    return before > after ? 1 : 0;
-}
-
-bit miller_decode(buffer *buf, bit last, int ith_bit) {
-    if (!buf) {
-        fprintf(stderr, "miller_decode: buf NULL\n");
-        return -1;
-    }
-
-    double before = 0;
-    double after = 0;
-    size_t i = 0;
-    while (!buf->iter_finished) {
-        double x = buf->next(buf);
-        if (i < buf->size/2) {
+        } else {
             if (x > before) {
                 before = x;
             }
-        } else {
+        }
+        x = next(trace);
+        fprintf(save, "%lf\n", x);
+    } while (x);
+
+    fclose(save);
+    return decoded;
+}
+
+decoded_bits *manchester_decode(FILE *trace, double fs, double background_level) {
+    fprintf(stderr, "manchester_decode: ");
+    decoded_bits *decoded = dynarr_init();
+
+    double before = background_level;
+    double after = background_level;
+    int acc = 0;
+    int i = 0;
+    double x = next(trace);
+    bit last_bit = -1;
+    FILE *save = fopen("test.txt", "a");
+    fprintf(save, "%lf\n", x);
+    do {
+        acc += 1;
+
+        // bit period expired, decode
+        if (acc/fs > BIT_PERIOD) {
+            if (fabs(before - background_level) < BG_THRESHOLD and
+                fabs(after - background_level) < BG_THRESHOLD) {
+                    break;
+            }
+            decoded->append(decoded, before > after ? 1 : 0);
+
+            before = background_level;
+            after = background_level;
+            acc = 0;
+            continue;
+        }
+
+        if (acc/fs > BIT_PERIOD/2) {
             if (x > after) {
                 after = x;
             }
-        }
-        i++;
-    }
-    buf->iter_finished = 0;
-    if (ith_bit % 9 == 0) {
-        if (last == 1) {
-            return 2; // end of message (!!!DO STILL APPEND 0!!!)
-        }
-    }
-    if (fabs(before - after) > 0.1) {
-        if (before < after) {
-            return 1;
         } else {
-            return 0;
+            if (x > before) {
+                before = x;
+            }
         }
-    }
-    return 0;
+
+        x = next(trace);
+        fprintf(save, "%lf\n", x);
+    } while (x);
+
+    fclose(save);
+    return decoded;
 }
 
-int check_parity(bit *bit_list, int len) {
+int check_parity(decoded_bits *decoded) {
+    bit *bit_list = &(decoded->values[1]);
     // Step through the list in chunks of 9 (8 data + 1 parity)
-    for (int i = 0; i < len - 8; i += 9) {
+    for (size_t i = 0; i < decoded->size - 8; i += 9) {
         bit *byte_bits = &bit_list[i];
-        if (i + 8 >= len) {
+        if (i + 8 >= decoded->size) {
             break;
         }
         bit parity_bit = bit_list[i + 8];
         // Calculate parity (Odd)
         int ones_count = 0;
         for (int j = 0; j < 8; j++) {
-            if (byte_bits[j] == 1) {
-                ones_count++;
-            }
+            ones_count += byte_bits[j];
         }
-        if ((ones_count + parity_bit) % 2 != 0) {
+        if ((ones_count + parity_bit) % 2 == 0) {
             printf("Warning parity check unsuccessful\n");
             return 0;
         }
@@ -158,31 +178,16 @@ int check_parity(bit *bit_list, int len) {
     return 1;
 }
 
-int find_start(buffer *buf, double background_level) {
-    if (!buf) {
-        fprintf(stderr, "find_start: buffer NULL\n");
-        return -1;
+double next(FILE *trace) {
+    char *success;
+    char line[MAX_LINE_READ];
+    success = fgets(line, MAX_LINE_READ, trace);
+    fseek(trace, -1, SEEK_CUR); // Somehow it skips the first character of every line except for the first...
+    if (!success) {
+        return 0;
+    } else if (fgetc(trace) == EOF) {
+        fprintf(stderr, "End of file reached\n");
+        return 0;
     }
-    fprintf(stderr, "find_start\n");
-    double x;
-    int success;
-    while (1) {
-        success = buf->fill(buf);
-        if (success != 0) {
-            return success;
-        }
-        buf->iter_finished = 0;
-        while (!buf->iter_finished) {
-            x = buf->next(buf);
-            if (fabs(x - background_level) > BG_THRESHOLD) {
-                goto out_of_loops;
-            }
-        }
-    }
-    out_of_loops:
-    buf->iter_finished = 0;
-    fprintf(stderr, "Start Found!\n");
-    buf->partial_fill(buf, (buf->size + buf->next_index) % buf->size);
-    buf->start = buf->next_index;
-    return 0;
+    return strtod(line, NULL);
 }

@@ -3,35 +3,26 @@
 #include <string.h>
 
 #include "decode.h"
-#include "buffer.h"
 
 // "Language extension" stuff
 #define or ||
 #define and &&
 
-// Constants
-#define BIT_PERIOD      9.44e-6 // seconds
-#define BUF_SIZE        (BIT_PERIOD*FS)
-#define MAX_LINE_READ   255 // Max characters to read from a single line in trace file.
-
-
 double FS = 0;
 char *file_to_open = NULL;
 
-void find_communication(buffer *buf, decode_t starting_mode) {
-    if (!buf) {
-        fprintf(stderr, "find_communication: buffer NULL");
+void find_communication(FILE *trace, decode_t starting_mode) {
+    if (!trace) {
+        fprintf(stderr, "find_communication: trace NULL");
         exit(1);
     }
-    fprintf(stderr, "find_communication\n");
 
-    int success = buf->fill(buf);
-    if (success != 0) {
+    double background_level = next(trace);
+    if (!background_level) {
         return;
     }
-    double background_level = buf->values[buf->start];
 
-    decode(buf, background_level, starting_mode);
+    decode(trace, background_level, starting_mode, FS);
 }
 
 int main(int argc, char *argv[]) {
@@ -67,20 +58,14 @@ int main(int argc, char *argv[]) {
     }
 
     // 2. Open trace file.
-    FILE *fh = fopen(file_to_open, "r");
-    if (fh == NULL) {
+    FILE *trace = fopen(file_to_open, "r");
+    if (trace == NULL) {
         perror("main");
         exit(1);
     }
 
-    // 3. Make buffer and read file.
-    buffer *buf = init_buffer(fh, FS);
-    if (!buf) {
-        fprintf(stderr, "Failed initializing buffer!\n");
-        exit(1);
-    }
-    find_communication(buf, Miller);
-    free_buffer(buf);
+    // 3. Decode communication.
+    find_communication(trace, Miller);
 
     return 0;
 }
