@@ -49,14 +49,13 @@ int main(int argc, char *argv[]) {
         }
     }
     if (!file_to_open) {
-        printf("Defaulting to trace file: %s\n", default_file);
+        // printf("Defaulting to trace file: %s\n", default_file);
         file_to_open = default_file;
     }
     if (!FS) {
         printf("Defaulting to a sample frequency of 62.5e6 Hz\n");
         FS = 62.5e6;
     }
-
     // 2. Open trace file.
     FILE *trace = fopen(file_to_open, "r");
     if (trace == NULL) {

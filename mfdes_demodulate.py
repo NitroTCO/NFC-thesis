@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.signal import hilbert, butter, filtfilt, lfilter
+from scipy.signal import hilbert, butter, lfilter
 import getopt
 from sys import argv
 import time
@@ -10,6 +10,7 @@ FS = 62.5e6 # Hz
 BIT_PERIOD = 9.44e-6
 BG_ERROR_MARGIN = 1
 PLOTTING = False
+FILTER_ONLY = False
 
 ###                          ###
 #------ HELPER FUNCTIONS ------#
@@ -256,8 +257,8 @@ def manchester_decode(sig):
 ###                               ###
 trace = "../waveform-traces/trace-2026-03-30 16:20:55.750289-62.5Mss-12.5Mpts.txt"
 args = argv[1:]
-options = "hpt:"
-long_options = ["Help", "Plot", "Trace="]
+options = "hpft:s:"
+long_options = ["Help", "Plot", "Filter", "Trace=", "Sample="]
 
 try:
     arguments, values = getopt.getopt(args, options, long_options)
@@ -269,12 +270,18 @@ try:
 Options:
     -h --Help               :  Show this message
     -p --Plot               :  Show plots while running
-    -t --Trace <trace file> :  Set to decode given file""")
+    -f --Filter             :  Only apply filters to signal and save those to file smoothed_signal.txt
+    -t --Trace <trace file> :  Set to decode given file
+    -s --Sample <frequency> :  Set sample frequency in Hz""")
             exit(0)
         elif currentArg in ("-p", "--Plot"):
             PLOTTING = True
         elif currentArg in ("-t", "--Trace"):
             trace = currentVal
+        elif currentArg in ("-f", "--Filter"):
+            FILTER_ONLY = True
+        elif currentArg in ("-s", "--Sample"):
+            FS = float(currentVal)
 except getopt.error as err:
     print(str(err))
     exit(1)
@@ -290,41 +297,41 @@ except FileNotFoundError:
     print(f"No such file or directory: {trace}")
     exit(1)
 sig = sig[int(4e6):int(1.1e7)]  # cut region of interest
-# plot_signal(sig, FS, "raw signal")
 
 time1 = time.time()
-print(f"reading: {time1-time0} s");
+reading_time = time1-time0
+print(f"reading: {reading_time}s");
 
 analytic_signal = hilbert(sig)
 amplitude_envelope = np.abs(analytic_signal)
-# plot_signal(amplitude_envelope, FS, "absoluted hilbert")
 
 time2 = time.time()
-print(f"hilbert filter: {time2-time1} s")
+print(f"hilbert filter: {time2-time1}s")
 
 b, a = butter(4, 2e6 / (FS / 2), btype='low')
 smoothed_signal = lfilter(b, a, amplitude_envelope)
 
 time3 = time.time()
-print(f"butter filter: {time3-time2} s")
+print(f"butter filter: {time3-time2}s")
 
 # remove start and end of envelope
 smoothed_signal = smoothed_signal[1000:-1000000]
 
-# plt.plot(np.arange(0, 590, 1), smoothed_signal[0:590])
-# plt.show()
-# exit(0)
 
-# save_signal_to_file(smoothed_signal, "../smoothed_signal.txt")
-
-# plot_signal(smoothed_signal, FS, "smoothed signal")
+if FILTER_ONLY:
+    save_signal_to_file(smoothed_signal, "smoothed_signal.txt")
+    time4 = time.time()
+    writing_time = time4-time3
+    print(f"writing file: {writing_time}s")
+    print(f"Overhead IO time: {writing_time+reading_time}s")
+    exit(0)
 
 # Extract blocks of signal by amplitude
 reader_blocks = extract_signal_by_amplitude(smoothed_signal, 1000, (0, 82), 5)
 card_blocks = extract_signal_by_amplitude(smoothed_signal, 1000, (70, 78), 2)
 
 time4 = time.time()
-print(f"blocks dividing: {time4-time3} s")
+print(f"blocks dividing: {time4-time3}s")
 
 # For each call response, decode the card and reader messages
 for i, rc in enumerate(zip(reader_blocks, card_blocks)):
@@ -343,3 +350,6 @@ for i, rc in enumerate(zip(reader_blocks, card_blocks)):
     sig_c = smoothed_signal[start_c - 2000: stop_c + 2000]
     message_c = manchester_decode(sig_c)
     print("Card bytes", message_c)
+
+time5 = time.time()
+print(f"\ntime to compare to C: {time5 - time3}s")

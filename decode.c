@@ -11,12 +11,16 @@ void decode(FILE *trace, double background_level, decode_t starting_mode, double
         switch (mode) {
         case Miller:
             decoded = miller_decode(trace, fs, background_level);
-            decoded->print(decoded);
+            if (decoded->size > 0) {
+                printf("miller decode: ");
+                decoded->print(decoded);
+            }
             if (!check_parity(decoded)) {
                 dynarr_free(decoded);
                 fclose(trace);
                 exit(1);
             }
+            background_level = next(trace);
             find_start(trace, background_level);
             mode = Manchester;
             dynarr_free(decoded);
@@ -24,12 +28,16 @@ void decode(FILE *trace, double background_level, decode_t starting_mode, double
 
         case Manchester:
             decoded = manchester_decode(trace, fs, background_level);
-            decoded->print(decoded);
+            if (decoded->size > 0) {
+                printf("manchester decode: ");
+                decoded->print(decoded);
+            }
             if (!check_parity(decoded)) {
                 dynarr_free(decoded);
                 fclose(trace);
                 exit(1);
             }
+            background_level = next(trace);
             find_start(trace, background_level);
             mode = Miller;
             dynarr_free(decoded);
@@ -55,7 +63,6 @@ void find_start(FILE *trace, double background_level) {
 }
 
 decoded_bits *miller_decode(FILE *trace, double fs, double background_level) {
-    fprintf(stderr, "miller_decode: ");
     decoded_bits *decoded = dynarr_init();
 
     double before = background_level;
@@ -102,7 +109,6 @@ decoded_bits *miller_decode(FILE *trace, double fs, double background_level) {
             }
         }
         x = next(trace);
-        fprintf(save, "%lf\n", x);
     } while (x);
 
     fclose(save);
@@ -110,7 +116,6 @@ decoded_bits *miller_decode(FILE *trace, double fs, double background_level) {
 }
 
 decoded_bits *manchester_decode(FILE *trace, double fs, double background_level) {
-    fprintf(stderr, "manchester_decode: ");
     decoded_bits *decoded = dynarr_init();
 
     double before = background_level;
@@ -120,7 +125,6 @@ decoded_bits *manchester_decode(FILE *trace, double fs, double background_level)
     double x = next(trace);
     bit last_bit = -1;
     FILE *save = fopen("test.txt", "a");
-    fprintf(save, "%lf\n", x);
     do {
         acc += 1;
 
@@ -186,8 +190,9 @@ double next(FILE *trace) {
     if (!success) {
         return 0;
     } else if (fgetc(trace) == EOF) {
-        fprintf(stderr, "End of file reached\n");
-        return 0;
+        fprintf(stderr, "End reached\n");
+        fclose(trace);
+        exit(0);
     }
     return strtod(line, NULL);
 }
